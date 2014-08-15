@@ -295,7 +295,8 @@ var Easyrtc = function() {
     // currently, it's just the "roomOccupant" event.
     //
     var allowedEvents = {
-        roomOccupant: true
+        roomOccupant: true,
+        getUsers: true
     };
     //
     // A map of eventListeners. The key is the event type.
@@ -402,7 +403,7 @@ var Easyrtc = function() {
     /** Most basic message acknowledgment object */
     this.ackMessage = {msgType: "ack"};
     /** Regular expression pattern for user ids. This will need modification to support non US character sets */
-    this.usernameRegExp = /^(.){1,64}$/;
+    this.usernameRegExp = /^(.){1,150}$/;
     /** @private */
     var cookieId = "easyrtcsid";
     /** @private */
@@ -609,6 +610,39 @@ var Easyrtc = function() {
         }
 
     };
+
+    /**
+     * This function was created by Santiago to add the users in a room as connections. This is called when a new room is created or when a user is added/removed from a room
+     * @param {String} roomName
+     * @param {Function} successCallback - A function which expects a roomName.
+     * @param {Function} failureCallback - A function which expects the following arguments: errorCode, errorText, roomName.
+     */
+    this.updateRoomConnections = function(roomName, successCallback, failureCallback) {
+        if (!self.webSocket) {
+            return false;
+        }
+        var msgData = {
+            roomName: roomName
+        };
+        var signallingSuccess, signallingFailure;
+        signallingSuccess = function(msgType, msgData) {
+            if (successCB) {
+                successCB(roomName);
+            }
+        };
+
+
+        signallingFailure = function(errorCode, errorText) {
+            if (failureCB) {
+                failureCB(errorCode, errorText, roomName);
+            }
+            else {
+                self.showError(errorCode, self.format(self.getConstantString("unableToEnterRoom"), roomName, errorText));
+            }
+        };
+        sendSignalling(null, "roomUpdateConnections", msgData, signallingSuccess, signallingFailure);
+    }
+
     /**
      * This function allows you to leave a single room. Note: the successCB and failureDB
      *  arguments are optional and will only be called if you are already connected to the server.
@@ -3932,27 +3966,41 @@ var Easyrtc = function() {
     // this function gets called for each room when there is a room update.
     //
     function processOccupantList(roomName, occupantList) {
-        var myInfo = null;
         self.reducedList = {};
-        var id;
-        for (id in occupantList) {
-            if (occupantList.hasOwnProperty(id)) {
-                if (id === self.myEasyrtcid) {
-                    myInfo = occupantList[id];
-                }
-                else {
-                    self.reducedList[id] = occupantList[id];
+        var id, peerData;
+        var userData = JSON.parse(self.username);
+
+        signallingSuccess = function(msgType, msgData) {
+            var usersList = JSON.parse(msgData.usersList);
+            for (id in occupantList) {
+                if (occupantList.hasOwnProperty(id)) {
+                    if (id === self.myEasyrtcid) {
+                        continue;
+                    }
+                    peerData = JSON.parse(self.idToName(id));
+                    self.reducedList[peerData.u] = peerData;
                 }
             }
-        }
-        //
-        // processLostPeers detects peers that have gone away and performs
-        // house keeping accordingly.
-        //
-        processLostPeers(self.reducedList);
-        if (roomOccupantListener) {
-            roomOccupantListener(roomName, self.reducedList, myInfo);
-        }
+
+            processLostPeers(self.reducedList); // detect peers that have gone away and performs house keeping accordingly.
+            for (index in usersList) {
+                if (usersList[index].uid == userData.u) {
+                    usersList.splice(index, 1);
+                }
+                else {
+                    usersList[index].online = typeof self.reducedList[usersList[index].uid] !== 'undefined' ? true : false;
+                }
+            }
+
+            if (roomOccupantListener) {
+                roomOccupantListener(roomName, usersList, null);
+            }
+        };
+        signallingFailure = function(errorCode, errorText) {
+            self.showError(errorCode, self.format(self.getConstantString("unableToEnterRoom"), roomName, errorText));
+        };
+
+        sendSignalling(null, "getUsersList", {"customer": userData.c}, signallingSuccess, signallingFailure)      
     }
 
     function sendQueuedCandidates(peer, onSignalSuccess, onSignalFailure) {
