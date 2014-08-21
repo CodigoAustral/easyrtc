@@ -547,7 +547,7 @@ var Easyrtc = function() {
      */
     this.joinRoom = function(roomName, roomParameters, successCB, failureCB) {
         if (self.roomJoin[roomName]) {
-            console.error("Developer error: attempt to join room " + roomName + " which you are already in.");
+            //console.error("Developer error: attempt to join room " + roomName + " which you are already in.");
             return;
         }
         var mediaIds = buildMediaIds();
@@ -626,15 +626,15 @@ var Easyrtc = function() {
         };
         var signallingSuccess, signallingFailure;
         signallingSuccess = function(msgType, msgData) {
-            if (successCB) {
-                successCB(roomName);
+            if (successCallback) {
+                successCallback(roomName);
             }
         };
 
 
         signallingFailure = function(errorCode, errorText) {
-            if (failureCB) {
-                failureCB(errorCode, errorText, roomName);
+            if (failureCallback) {
+                failureCallback(errorCode, errorText, roomName);
             }
             else {
                 self.showError(errorCode, self.format(self.getConstantString("unableToEnterRoom"), roomName, errorText));
@@ -2447,8 +2447,8 @@ var Easyrtc = function() {
      * @example
      *     easyrtc.setIceUsedInCalls( {"iceServers": [
      *      {
-	 *			"url": "stun:stun.sipgate.net"
-	 *		},
+     *          "url": "stun:stun.sipgate.net"
+     *      },
      *      {
      *         "url": "stun:217.10.68.152"
      *      },
@@ -4031,7 +4031,10 @@ var Easyrtc = function() {
         if (msg.targetGroup) {
             targeting.targetGroup = msg.targetGroup;
         }
-        if (msg.senderEasyrtcid) {
+        if (msg.username) {
+            self.receivePeerDistribute({user: msg.username, room: targeting.targetRoom}, msg, targeting);
+        }
+        else if (msg.senderEasyrtcid) {
             self.receivePeerDistribute(msg.senderEasyrtcid, msg, targeting);
         }
         else {
